@@ -31,12 +31,12 @@ app.use(helmet({
 // CORS - Configuration restrictive
 // ============================================
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
+  ? process.env.ALLOWED_ORIGINS.split(",").map((origin: string) => origin.trim())
   : ["http://localhost:3000", "http://localhost:5173"];
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Autoriser les requêtes sans origine (mobile apps, Postman, etc.) si configuré
       if (!origin && process.env.ALLOW_NO_ORIGIN === "true") {
         return callback(null, true);
@@ -103,7 +103,7 @@ const smtpTo = process.env.SMTP_TO || smtpUser;
 // AUTHENTIFICATION API KEY
 // ============================================
 const API_KEYS = process.env.API_KEYS
-  ? process.env.API_KEYS.split(",").map((key) => key.trim())
+  ? process.env.API_KEYS.split(",").map((key: string) => key.trim())
   : [];
 
 // Middleware d'authentification par API key
@@ -217,7 +217,7 @@ function validateEmails(emails: string | string[]): { valid: string[]; invalid: 
 // ============================================
 
 // GET /health - Route publique de santé
-app.get("/health", (_req, res) => {
+app.get("/health", (_req: express.Request, res: express.Response) => {
   res.json({
     status: "ok",
     service: "mail-service",
@@ -564,7 +564,7 @@ app.post(
 // ============================================
 
 // Gestion des erreurs 404
-app.use((req, res) => {
+app.use((req: express.Request, res: express.Response) => {
   res.status(404).json({
     ok: false,
     error: "Route not found",
