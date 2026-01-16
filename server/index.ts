@@ -217,7 +217,7 @@ function validateEmails(emails: string | string[]): { valid: string[]; invalid: 
 // ============================================
 
 // GET /health - Route publique de santé
-app.get("/health", (req, res) => {
+app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "mail-service",
@@ -276,7 +276,7 @@ app.post(
       return true;
     }),
   ],
-  async (req, res) => {
+  async (req: express.Request, res: express.Response) => {
     // Vérifier les erreurs de validation
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -385,7 +385,7 @@ app.post(
     body("data").optional().isObject(),
     body("replyTo").optional().isEmail().withMessage("Reply-To doit être un email valide"),
   ],
-  async (req, res) => {
+  async (req: express.Request, res: express.Response) => {
     // Vérifier les erreurs de validation
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -499,7 +499,7 @@ app.post(
       .escape(),
     body("subject").optional().isLength({ max: 200 }).trim().escape(),
   ],
-  async (req, res) => {
+  async (req: express.Request, res: express.Response) => {
     // Vérifier les erreurs de validation
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -573,7 +573,7 @@ app.use((req, res) => {
 });
 
 // Gestion des erreurs globales
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("❌ Erreur serveur:", {
     error: err,
     path: req.path,
