@@ -9,8 +9,9 @@ import validator from "validator";
 
 const app = express();
 
-// Configuration Express
-app.set("trust proxy", true);
+// Configuration Express - Ne pas utiliser trust proxy pour éviter le warning
+// On extraira l'IP manuellement dans les rate limiters
+// app.set("trust proxy", true); // Désactivé pour éviter le warning express-rate-limit
 
 // ============================================
 // SÉCURITÉ - Headers HTTP
@@ -71,6 +72,15 @@ const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Extraire l'IP depuis X-Forwarded-For (Render/Cloudflare) ou utiliser l'IP directe
+  keyGenerator: (req) => {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (forwarded) {
+      const ips = Array.isArray(forwarded) ? forwarded : forwarded.split(",");
+      return ips[0].trim();
+    }
+    return req.socket.remoteAddress || req.ip || "unknown";
+  },
 });
 
 const emailLimiter = rateLimit({
@@ -82,6 +92,15 @@ const emailLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Extraire l'IP depuis X-Forwarded-For (Render/Cloudflare) ou utiliser l'IP directe
+  keyGenerator: (req) => {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (forwarded) {
+      const ips = Array.isArray(forwarded) ? forwarded : forwarded.split(",");
+      return ips[0].trim();
+    }
+    return req.socket.remoteAddress || req.ip || "unknown";
+  },
 });
 
 app.use("/api/", generalLimiter);
@@ -134,7 +153,7 @@ const authenticateApiKey = (
   }
 
   if (!API_KEYS.includes(apiKey as string)) {
-    console.warn(`⚠️ Tentative d'accès avec une clé API invalide depuis ${req.ip}`);
+    console.warn(`⚠️ Tentative d'accès avec une clé API invalide depuis ${getClientIp(req)}`);
     return res.status(403).json({
       ok: false,
       error: "Clé API invalide",
@@ -170,6 +189,16 @@ if (!smtpUser || !smtpPass) {
 // HELPERS
 // ============================================
 
+// Fonction helper pour extraire l'IP réelle du client
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const ips = Array.isArray(forwarded) ? forwarded : forwarded.split(",");
+    return ips[0].trim();
+  }
+  return req.socket.remoteAddress || req.ip || "unknown";
+}
+
 // Fonction helper pour créer un transporter SMTP
 function createTransporter() {
   const isSecurePort = smtpPort === 465; // Port 465 = SSL, Port 587 = STARTTLS
@@ -182,9 +211,19 @@ function createTransporter() {
       user: smtpUser,
       pass: smtpPass,
     },
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 15000,
+    // Timeouts augmentés pour éviter les problèmes de connexion
+    connectionTimeout: 30000, // 30 secondes
+    greetingTimeout: 30000, // 30 secondes
+    socketTimeout: 60000, // 60 secondes (timeout pour les opérations)
+    // Options de retry
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 3,
+    // Désactiver la vérification stricte du certificat si nécessaire (pour certains hébergeurs)
+    tls: {
+      rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
+      minVersion: "TLSv1.2",
+    },
     requireTLS: !isSecurePort && smtpPort === 587,
   });
 }
@@ -325,7 +364,7 @@ app.post(
         subject,
         hasText: !!text,
         hasHtml: !!html,
-        ip: req.ip,
+        ip: getClientIp(req),
       });
 
       const result = await transporter.sendMail(mailOptions);
@@ -343,14 +382,24 @@ app.post(
         rejected: result.rejected,
       });
     } catch (err: any) {
-      console.error("❌ Erreur lors de l'envoi de l'email:", {
+      const errorDetails = {
         message: err.message,
         code: err.code || "N/A",
         command: err.command || "N/A",
         response: err.response || "N/A",
         responseCode: err.responseCode || "N/A",
-        ip: req.ip,
-      });
+        ip: getClientIp(req),
+      };
+      
+      console.error("❌ Erreur lors de l'envoi de l'email:", errorDetails);
+      
+      // Message d'aide si c'est un timeout de connexion
+      if (err.code === "ETIMEDOUT" || err.message?.includes("timeout")) {
+        console.error("⚠️ Timeout de connexion SMTP. Cela peut indiquer que:");
+        console.error("   1. Le port SMTP est bloqué par l'hébergeur (Render peut bloquer les ports 465/587)");
+        console.error("   2. Le serveur SMTP est inaccessible depuis cet environnement");
+        console.error("   3. Considérez l'utilisation d'un service SMTP relais (SendGrid, Mailgun, AWS SES)");
+      }
 
       return res.status(500).json({
         ok: false,
@@ -434,7 +483,7 @@ app.post(
       console.log("📧 Envoi d'email avec template:", {
         to: mailOptions.to,
         subject,
-        ip: req.ip,
+        ip: getClientIp(req),
       });
 
       const result = await transporter.sendMail(mailOptions);
@@ -455,7 +504,7 @@ app.post(
       console.error("❌ Erreur lors de l'envoi de l'email:", {
         message: err.message,
         code: err.code || "N/A",
-        ip: req.ip,
+        ip: getClientIp(req),
       });
 
       return res.status(500).json({
@@ -543,12 +592,12 @@ app.post(
         text,
       });
 
-      console.log("✅ Message de contact envoyé avec succès", { ip: req.ip });
+      console.log("✅ Message de contact envoyé avec succès", { ip: getClientIp(req) });
       return res.json({ ok: true });
     } catch (err: any) {
       console.error("❌ Erreur lors de l'envoi du message:", {
         error: err,
-        ip: req.ip,
+        ip: getClientIp(req),
       });
       return res.status(500).json({
         ok: false,
@@ -577,7 +626,7 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
   console.error("❌ Erreur serveur:", {
     error: err,
     path: req.path,
-    ip: req.ip,
+    ip: getClientIp(req),
   });
   res.status(500).json({
     ok: false,
