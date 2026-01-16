@@ -1,0 +1,48 @@
+version: "3.9"
+
+name: mail-service
+
+services:
+  mail-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mail-service:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-ssl0.ovh.net}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TO=${SMTP_TO:-}
+      - PORT=${PORT:-3000}
+    restart: unless-stopped
+    networks:
+      - mail-network
+
+  mail-service-dev:
+    image: node:25-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-ssl0.ovh.net}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_TO=${SMTP_TO}
+      - PORT=${PORT:-3000}
+    profiles: [dev]
+    networks:
+      - mail-network
+
+networks:
+  mail-network:
+    driver: bridge
