@@ -3757,7 +3757,7 @@ app.delete("/api/admin/rgpd/delete", authenticateToken, requireAdmin, (req, res)
 });
 
 const port = parseInt(process.env.PORT || "3000", 10);
-app.listen(port, () => {
+const server = app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`API listening on :${port}`);
   console.log(`📁 Articles directory: ${ARTICLES_DIR}`);
@@ -3765,6 +3765,22 @@ app.listen(port, () => {
     console.log(`💳 Stripe intégré (mode: ${stripeSecretKey?.startsWith("sk_live") ? "production" : "test"})`);
   } else {
     console.log(`⚠️ Stripe non configuré (STRIPE_SECRET_KEY manquant)`);
+  }
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${port} is already in use.`);
+    console.error(`💡 Solutions:`);
+    console.error(`   1. Kill the process using port ${port}:`);
+    console.error(`      Windows: netstat -ano | findstr :${port} then taskkill /PID <PID> /F`);
+    console.error(`      Or use: npx kill-port ${port}`);
+    console.error(`   2. Use a different port by setting PORT environment variable:`);
+    console.error(`      PORT=3001 npm start`);
+    process.exit(1);
+  } else {
+    console.error('❌ Server error:', err);
+    process.exit(1);
   }
 });
 
