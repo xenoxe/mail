@@ -14,7 +14,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./"
+    "rootDir": "./server"
   },
   "include": ["server/**/*"],
   "exclude": ["node_modules", "dist"]
